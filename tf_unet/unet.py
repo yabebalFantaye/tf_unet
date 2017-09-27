@@ -34,8 +34,8 @@ from tf_unet.layers import (weight_variable, weight_variable_devonc, bias_variab
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
-def create_conv_net(x, keep_prob, channels, n_class, layers=3, features_root=16, filter_size=3, pool_size=2, summaries=True):
-    """
+def create_conv_net(x, keep_prob, channels, n_class, layers=3,
+    features_root=16, filter_size=3, pool_size=2, summaries=True): """
     Creates a new convolutional unet for the given parametrization.
     
     :param x: input tensor, shape [?,nx,ny,channels]
@@ -49,16 +49,14 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3, features_root=16,
     :param summaries: Flag if summaries should be created
     """
     
-    logging.info("Layers {layers}, features {features}, filter size {filter_size}x{filter_size}, pool size: {pool_size}x{pool_size}".format(layers=layers,
-                                                                                                           features=features_root,
-                                                                                                           filter_size=filter_size,
-                                                                                                           pool_size=pool_size))
-    # Placeholder for the input image
-    nx = tf.shape(x)[1]
-    ny = tf.shape(x)[2]
-    x_image = tf.reshape(x, tf.stack([-1,nx,ny,channels]))
-    in_node = x_image
-    batch_size = tf.shape(x_image)[0]
+    logging.info( '''Layers {layers}, features {features}, filter size
+{filter_size}x{filter_size}, pool size:
+{pool_size}x{pool_size}'''.format(layers=layers,
+features=features_root, filter_size=filter_size, pool_size=pool_size))
+
+    # Placeholder for the input image nx = tf.shape(x)[1] ny =
+    tf.shape(x)[2] x_image = tf.reshape(x, tf.stack([-1,nx,ny,channels]))
+    in_node = x_image batch_size = tf.shape(x_image)[0]
  
     weights = []
     biases = []
@@ -71,70 +69,79 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3, features_root=16,
     in_size = 1000
     size = in_size
     # down layers
-    for layer in range(0, layers):
-        features = 2**layer*features_root
-        stddev = np.sqrt(2 / (filter_size**2 * features))
-        if layer == 0:
-            w1 = weight_variable([filter_size, filter_size, channels, features], stddev)
-        else:
-            w1 = weight_variable([filter_size, filter_size, features//2, features], stddev)
+    with tf.variable_scope('down_layers') as scope:
+        for layer in range(0, layers):
+            features = 2**layer*features_root
+            stddev = np.sqrt(2 / (filter_size**2 * features))
+            name='{}'.format(layer)
+            name_L1=name+'_1'
+            name_L2=name+'_2'            
+            if layer == 0:
+                w1 = weight_variable([filter_size, filter_size, channels, features],
+                                         stddev,i=name_L1)
+            else:
+                w1 = weight_variable([filter_size, filter_size, features//2, features],
+                                         stddev,i=name_L1)
             
-        w2 = weight_variable([filter_size, filter_size, features, features], stddev)
-        b1 = bias_variable([features])
-        b2 = bias_variable([features])
+                w2 = weight_variable([filter_size, filter_size, features, features],
+                                         stddev,i=name_L2)
+                b1 = bias_variable([features],i=name_L1)
+                b2 = bias_variable([features],i=name_L2)
         
-        conv1 = conv2d(in_node, w1, keep_prob)
-        tmp_h_conv = tf.nn.relu(conv1 + b1)
-        conv2 = conv2d(tmp_h_conv, w2, keep_prob)
-        dw_h_convs[layer] = tf.nn.relu(conv2 + b2)
+                conv1 = conv2d(in_node, w1, keep_prob,i=name_L1)
+                tmp_h_conv = tf.nn.relu(conv1 + b1,name='relu%s'%name_L1)
+                conv2 = conv2d(tmp_h_conv, w2, keep_prob,i=name_L2)
+                dw_h_convs[layer] = tf.nn.relu(conv2 + b2,name='relu%s'%name_L2)
         
-        weights.append((w1, w2))
-        biases.append((b1, b2))
-        convs.append((conv1, conv2))
+                weights.append((w1, w2))
+                biases.append((b1, b2))
+                convs.append((conv1, conv2))
         
-        size -= 4
-        if layer < layers-1:
-            pools[layer] = max_pool(dw_h_convs[layer], pool_size)
-            in_node = pools[layer]
-            size /= 2
+                size -= 4
+                if layer < layers-1:
+                    pools[layer] = max_pool(dw_h_convs[layer], pool_size,i=name)
+                    in_node = pools[layer]
+                    size /= 2
         
     in_node = dw_h_convs[layers-1]
         
     # up layers
-    for layer in range(layers-2, -1, -1):
-        features = 2**(layer+1)*features_root
-        stddev = np.sqrt(2 / (filter_size**2 * features))
+    with tf.variable_scope('up_layers') as scope:    
+        for layer in range(layers-2, -1, -1):
+            features = 2**(layer+1)*features_root
+            stddev = np.sqrt(2 / (filter_size**2 * features))
         
-        wd = weight_variable_devonc([pool_size, pool_size, features//2, features], stddev)
-        bd = bias_variable([features//2])
-        h_deconv = tf.nn.relu(deconv2d(in_node, wd, pool_size) + bd)
-        h_deconv_concat = crop_and_concat(dw_h_convs[layer], h_deconv)
-        deconv[layer] = h_deconv_concat
+            wd = weight_variable_devonc([pool_size, pool_size, features//2, features], stddev)
+            bd = bias_variable([features//2])
+            h_deconv = tf.nn.relu(deconv2d(in_node, wd, pool_size) + bd)
+            h_deconv_concat = crop_and_concat(dw_h_convs[layer], h_deconv)
+            deconv[layer] = h_deconv_concat
         
-        w1 = weight_variable([filter_size, filter_size, features, features//2], stddev)
-        w2 = weight_variable([filter_size, filter_size, features//2, features//2], stddev)
-        b1 = bias_variable([features//2])
-        b2 = bias_variable([features//2])
+            w1 = weight_variable([filter_size, filter_size, features, features//2], stddev)
+            w2 = weight_variable([filter_size, filter_size, features//2, features//2], stddev)
+            b1 = bias_variable([features//2])
+            b2 = bias_variable([features//2])
         
-        conv1 = conv2d(h_deconv_concat, w1, keep_prob)
-        h_conv = tf.nn.relu(conv1 + b1)
-        conv2 = conv2d(h_conv, w2, keep_prob)
-        in_node = tf.nn.relu(conv2 + b2)
-        up_h_convs[layer] = in_node
+            conv1 = conv2d(h_deconv_concat, w1, keep_prob)
+            h_conv = tf.nn.relu(conv1 + b1)
+            conv2 = conv2d(h_conv, w2, keep_prob)
+            in_node = tf.nn.relu(conv2 + b2)
+            up_h_convs[layer] = in_node
 
-        weights.append((w1, w2))
-        biases.append((b1, b2))
-        convs.append((conv1, conv2))
+            weights.append((w1, w2))
+            biases.append((b1, b2))
+            convs.append((conv1, conv2))
         
-        size *= 2
-        size -= 4
+            size *= 2
+            size -= 4
 
     # Output Map
-    weight = weight_variable([1, 1, features_root, n_class], stddev)
-    bias = bias_variable([n_class])
-    conv = conv2d(in_node, weight, tf.constant(1.0))
-    output_map = tf.nn.relu(conv + bias)
-    up_h_convs["out"] = output_map
+    with tf.variable_scope('output') as scope:    
+        weight = weight_variable([1, 1, features_root, n_class], stddev)
+        bias = bias_variable([n_class])
+        conv = conv2d(in_node, weight, tf.constant(1.0))
+        output_map = tf.nn.relu(conv + bias)
+        up_h_convs["out"] = output_map
     
     if summaries:
         for i, (c1, c2) in enumerate(convs):
@@ -176,24 +183,34 @@ class Unet(object):
     :param cost_kwargs: (optional) kwargs passed to the cost function. See Unet._get_cost for more options
     """
     
-    def __init__(self, channels=3, n_class=2, cost="cross_entropy", cost_kwargs={}, **kwargs):
+    def __init__(self, channels=3, n_class=2, cost="cross_entropy",
+                     cost_kwargs={}, **kwargs):
+        #get graph
         tf.reset_default_graph()
         
         self.n_class = n_class
         self.summaries = kwargs.get("summaries", True)
-        
+
+        #define input params 
         self.x = tf.placeholder("float", shape=[None, None, None, channels])
         self.y = tf.placeholder("float", shape=[None, None, None, n_class])
         self.keep_prob = tf.placeholder(tf.float32) #dropout (keep probability)
-        
-        logits, self.variables, self.offset = create_conv_net(self.x, self.keep_prob, channels, n_class, **kwargs)
-        
+
+        #construct the model architecture
+        logits, self.variables, self.offset = create_conv_net(self.x,
+                                                              self.keep_prob,
+                                                              channels, n_class,
+                                                              **kwargs)
+        #define operator for estimating error to write in summary
         self.cost = self._get_cost(logits, cost, cost_kwargs)
-        
+
+        #explicitly define gradient operator to write in summary
         self.gradients_node = tf.gradients(self.cost, self.variables)
-         
+
+        #estimate error
         self.cross_entropy = tf.reduce_mean(cross_entropy(tf.reshape(self.y, [-1, n_class]),
-                                                          tf.reshape(pixel_wise_softmax_2(logits), [-1, n_class])))
+                                                          tf.reshape(pixel_wise_softmax_2(logits),
+                                                                         [-1, n_class])))
         
         self.predicter = pixel_wise_softmax_2(logits)
         self.correct_pred = tf.equal(tf.argmax(self.predicter, 3), tf.argmax(self.y, 3))
@@ -371,7 +388,9 @@ class Trainer(object):
         
         return init
 
-    def train(self, data_provider, output_path, training_iters=10, epochs=100, dropout=0.75, display_step=1, restore=False, write_graph=False):
+    def train(self, data_provider, output_path, training_iters=10,
+                  epochs=100, dropout=0.75, display_step=1,
+                  restore=False, write_graph=False):
         """
         Lauches the training process
         
@@ -414,10 +433,12 @@ class Trainer(object):
                     batch_x, batch_y = data_provider(self.batch_size)
                      
                     # Run optimization op (backprop)
-                    _, loss, lr, gradients = sess.run((self.optimizer, self.net.cost, self.learning_rate_node, self.net.gradients_node), 
+                    _, loss, lr, gradients = sess.run((self.optimizer, self.net.cost,
+                                                       self.learning_rate_node,
+                                                      self.net.gradients_node), 
                                                       feed_dict={self.net.x: batch_x,
-                                                                 self.net.y: util.crop_to_shape(batch_y, pred_shape),
-                                                                 self.net.keep_prob: dropout})
+                                                      self.net.y: util.crop_to_shape(batch_y, pred_shape),
+                                                       self.net.keep_prob: dropout})
 
                     if avg_gradients is None:
                         avg_gradients = [np.zeros_like(gradient) for gradient in gradients]
@@ -428,7 +449,9 @@ class Trainer(object):
                     self.norm_gradients_node.assign(norm_gradients).eval()
                     
                     if step % display_step == 0:
-                        self.output_minibatch_stats(sess, summary_writer, step, batch_x, util.crop_to_shape(batch_y, pred_shape))
+                        self.output_minibatch_stats(sess, summary_writer,
+                                                        step, batch_x,
+                                                        util.crop_to_shape(batch_y, pred_shape))
                         
                     total_loss += loss
 
