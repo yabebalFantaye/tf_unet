@@ -7,7 +7,7 @@ Tests for `tf_unet` module.
 from __future__ import print_function, division, absolute_import, unicode_literals
 
 import pytest
-from tf_unet import tf_unet
+import tf_unet
 
 
 class TestTf_unet(object):

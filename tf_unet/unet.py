@@ -35,7 +35,9 @@ from tf_unet.layers import (weight_variable, weight_variable_devonc, bias_variab
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
 def create_conv_net(x, keep_prob, channels, n_class, layers=3,
-    features_root=16, filter_size=3, pool_size=2, summaries=True): """
+    features_root=16, filter_size=3, pool_size=2, summaries=True):
+
+    """
     Creates a new convolutional unet for the given parametrization.
     
     :param x: input tensor, shape [?,nx,ny,channels]
@@ -49,14 +51,19 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3,
     :param summaries: Flag if summaries should be created
     """
     
-    logging.info( '''Layers {layers}, features {features}, filter size
-{filter_size}x{filter_size}, pool size:
-{pool_size}x{pool_size}'''.format(layers=layers,
-features=features_root, filter_size=filter_size, pool_size=pool_size))
+    logging.info( '''Layers {layers}, features {features},\
+    filter size {filter_size}x{filter_size},\
+    pool size: {pool_size}x{pool_size}'''.format(layers=layers,
+                                      features=features_root,
+                                      filter_size=filter_size,
+                                      pool_size=pool_size))
 
-    # Placeholder for the input image nx = tf.shape(x)[1] ny =
-    tf.shape(x)[2] x_image = tf.reshape(x, tf.stack([-1,nx,ny,channels]))
-    in_node = x_image batch_size = tf.shape(x_image)[0]
+    # Placeholder for the input image
+    nx = tf.shape(x)[1]
+    ny =tf.shape(x)[2]
+    x_image = tf.reshape(x, tf.stack([-1,nx,ny,channels]))
+    in_node = x_image
+    batch_size = tf.shape(x_image)[0]
  
     weights = []
     biases = []
@@ -82,50 +89,56 @@ features=features_root, filter_size=filter_size, pool_size=pool_size))
             else:
                 w1 = weight_variable([filter_size, filter_size, features//2, features],
                                          stddev,i=name_L1)
-            
-                w2 = weight_variable([filter_size, filter_size, features, features],
-                                         stddev,i=name_L2)
-                b1 = bias_variable([features],i=name_L1)
-                b2 = bias_variable([features],i=name_L2)
-        
-                conv1 = conv2d(in_node, w1, keep_prob,i=name_L1)
-                tmp_h_conv = tf.nn.relu(conv1 + b1,name='relu%s'%name_L1)
-                conv2 = conv2d(tmp_h_conv, w2, keep_prob,i=name_L2)
-                dw_h_convs[layer] = tf.nn.relu(conv2 + b2,name='relu%s'%name_L2)
-        
-                weights.append((w1, w2))
-                biases.append((b1, b2))
-                convs.append((conv1, conv2))
-        
-                size -= 4
-                if layer < layers-1:
-                    pools[layer] = max_pool(dw_h_convs[layer], pool_size,i=name)
-                    in_node = pools[layer]
-                    size /= 2
-        
-    in_node = dw_h_convs[layers-1]
+
+            w2 = weight_variable([filter_size, filter_size, features, features],
+                                     stddev,i=name_L2)
+            b1 = bias_variable([features],i=name_L1)
+            b2 = bias_variable([features],i=name_L2)
+
+            conv1 = conv2d(in_node, w1, keep_prob,i=name_L1)
+            tmp_h_conv = tf.nn.relu(conv1 + b1,name='relu%s'%name_L1)
+            conv2 = conv2d(tmp_h_conv, w2, keep_prob,i=name_L2)
+            dw_h_convs[layer] = tf.nn.relu(conv2 + b2,name='relu%s'%name_L2)
+
+            #print('layer: ',layer)
+
+            weights.append((w1, w2))
+            biases.append((b1, b2))
+            convs.append((conv1, conv2))
+
+            size -= 4
+            if layer < layers-1:
+                pools[layer] = max_pool(dw_h_convs[layer], pool_size,i=name)
+                in_node = pools[layer]
+                size /= 2
+
+        in_node = dw_h_convs[layers-1]
         
     # up layers
     with tf.variable_scope('up_layers') as scope:    
         for layer in range(layers-2, -1, -1):
+            name='{}'.format(layer)
+            name_L1=name+'_1'
+            name_L2=name+'_2'            
+            
             features = 2**(layer+1)*features_root
             stddev = np.sqrt(2 / (filter_size**2 * features))
         
-            wd = weight_variable_devonc([pool_size, pool_size, features//2, features], stddev)
-            bd = bias_variable([features//2])
-            h_deconv = tf.nn.relu(deconv2d(in_node, wd, pool_size) + bd)
+            wd = weight_variable_devonc([pool_size, pool_size, features//2, features], stddev,i=name_L1)
+            bd = bias_variable([features//2],i=name_L1)
+            h_deconv = tf.nn.relu(deconv2d(in_node, wd, pool_size) + bd,name='relu%s'%layer)
             h_deconv_concat = crop_and_concat(dw_h_convs[layer], h_deconv)
             deconv[layer] = h_deconv_concat
         
-            w1 = weight_variable([filter_size, filter_size, features, features//2], stddev)
-            w2 = weight_variable([filter_size, filter_size, features//2, features//2], stddev)
-            b1 = bias_variable([features//2])
-            b2 = bias_variable([features//2])
+            w1 = weight_variable([filter_size, filter_size, features, features//2], stddev,i=name_L1)
+            w2 = weight_variable([filter_size, filter_size, features//2, features//2], stddev,i=name_L2)
+            b1 = bias_variable([features//2],i=name_L1)
+            b2 = bias_variable([features//2],i=name_L2)
         
-            conv1 = conv2d(h_deconv_concat, w1, keep_prob)
-            h_conv = tf.nn.relu(conv1 + b1)
-            conv2 = conv2d(h_conv, w2, keep_prob)
-            in_node = tf.nn.relu(conv2 + b2)
+            conv1 = conv2d(h_deconv_concat, w1, keep_prob,i=name_L1)
+            h_conv = tf.nn.relu(conv1 + b1,name='relu%s'%name_L1)
+            conv2 = conv2d(h_conv, w2, keep_prob,i=name_L2)
+            in_node = tf.nn.relu(conv2 + b2,name='relu%s'%name_L2)
             up_h_convs[layer] = in_node
 
             weights.append((w1, w2))
@@ -137,10 +150,10 @@ features=features_root, filter_size=filter_size, pool_size=pool_size))
 
     # Output Map
     with tf.variable_scope('output') as scope:    
-        weight = weight_variable([1, 1, features_root, n_class], stddev)
-        bias = bias_variable([n_class])
-        conv = conv2d(in_node, weight, tf.constant(1.0))
-        output_map = tf.nn.relu(conv + bias)
+        weight = weight_variable([1, 1, features_root, n_class], stddev,i='_out')
+        bias = bias_variable([n_class],i='_out')
+        conv = conv2d(in_node, weight, tf.constant(1.0),i='_out')
+        output_map = tf.nn.relu(conv + bias,name='relu_out')
         up_h_convs["out"] = output_map
     
     if summaries:
@@ -320,9 +333,10 @@ class Trainer(object):
     prediction_path = "prediction"
     verification_batch_size = 4
     
-    def __init__(self, net, batch_size=1, optimizer="momentum", opt_kwargs={}):
+    def __init__(self, net, batch_size=1,norm_grads=False,optimizer="momentum", opt_kwargs={}):
         self.net = net
         self.batch_size = batch_size
+        self.norm_grads = norm_grads
         self.optimizer = optimizer
         self.opt_kwargs = opt_kwargs
         
@@ -356,7 +370,7 @@ class Trainer(object):
         
         self.norm_gradients_node = tf.Variable(tf.constant(0.0, shape=[len(self.net.gradients_node)]))
         
-        if self.net.summaries:
+        if self.net.summaries and self.norm_grads:
             tf.summary.histogram('norm_grads', self.norm_gradients_node)
 
         tf.summary.scalar('loss', self.net.cost)
@@ -440,13 +454,11 @@ class Trainer(object):
                                                       self.net.y: util.crop_to_shape(batch_y, pred_shape),
                                                        self.net.keep_prob: dropout})
 
-                    if avg_gradients is None:
-                        avg_gradients = [np.zeros_like(gradient) for gradient in gradients]
-                    for i in range(len(gradients)):
-                        avg_gradients[i] = (avg_gradients[i] * (1.0 - (1.0 / (step+1)))) + (gradients[i] / (step+1))
+                    if self.net.summaries and self.norm_grads:
+                        avg_gradients = _update_avg_gradients(avg_gradients, gradients, step)
+                        norm_gradients = [np.linalg.norm(gradient) for gradient in avg_gradients]
+                        self.norm_gradients_node.assign(norm_gradients).eval()
                         
-                    norm_gradients = [np.linalg.norm(gradient) for gradient in avg_gradients]
-                    self.norm_gradients_node.assign(norm_gradients).eval()
                     
                     if step % display_step == 0:
                         self.output_minibatch_stats(sess, summary_writer,
@@ -484,7 +496,8 @@ class Trainer(object):
         return pred_shape
     
     def output_epoch_stats(self, epoch, total_loss, training_iters, lr):
-        logging.info("Epoch {:}, Average loss: {:.4f}, learning rate: {:.4f}".format(epoch, (total_loss / training_iters), lr))
+        logging.info('''Epoch {:}, Average loss: {:.4f}, 
+        learning rate: {:.4f}'''.format(epoch, (total_loss / training_iters), lr))
     
     def output_minibatch_stats(self, sess, summary_writer, step, batch_x, batch_y):
         # Calculate batch loss and accuracy
@@ -497,12 +510,18 @@ class Trainer(object):
                                                                       self.net.keep_prob: 1.})
         summary_writer.add_summary(summary_str, step)
         summary_writer.flush()
-        logging.info("Iter {:}, Minibatch Loss= {:.4f}, Training Accuracy= {:.4f}, Minibatch error= {:.1f}%".format(step,
-                                                                                                            loss,
-                                                                                                            acc,
-                                                                                                            error_rate(predictions, batch_y)))
+        logging.info('''Iter {:}, Minibatch Loss= {:.4f}, 
+        Training Accuracy= {:.4f}, Minibatch 
+        error= {:.1f}%'''.format(step,loss,acc, error_rate(predictions, batch_y)))
 
-
+def _update_avg_gradients(avg_gradients, gradients, step):
+    if avg_gradients is None:
+        avg_gradients = [np.zeros_like(gradient) for gradient in gradients]
+    for i in range(len(gradients)):
+        avg_gradients[i] = (avg_gradients[i] * (1.0 - (1.0 / (step+1)))) + (gradients[i] / (step+1))
+        
+    return avg_gradients
+        
 def error_rate(predictions, labels):
     """
     Return the error rate based on dense predictions and 1-hot labels.

@@ -26,11 +26,11 @@ def weight_variable(shape, stddev=0.1,i=''):
     return tf.Variable(initial,name='w%s'%i)
 
 def weight_variable_devonc(shape, stddev=0.1,i=''):
-    return tf.Variable(tf.truncated_normal(shape, stddev=stddev),name='b%s'%i)
+    return tf.Variable(tf.truncated_normal(shape, stddev=stddev),name='w%s'%i)
 
-def bias_variable(shape):
+def bias_variable(shape,i=''):
     initial = tf.constant(0.1, shape=shape)
-    return tf.Variable(initial)
+    return tf.Variable(initial,name='b%s'%i)
 
 def conv2d(x, W,keep_prob_,i=''):
     conv_2d = tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='VALID',name='conv%s'%i)
@@ -60,7 +60,7 @@ def crop_and_concat(x1,x2,i=''):
     offsets = [0, (x1_shape[1] - x2_shape[1]) // 2, (x1_shape[2] - x2_shape[2]) // 2, 0]
     size = [-1, x2_shape[1], x2_shape[2], -1]
     x1_crop = tf.slice(x1, offsets, size)
-    return tf.concat([x1_crop, x2], 3,name='crop_concat%s'i)   
+    return tf.concat([x1_crop, x2], 3,name='crop_concat%s'%i)   
 
 def pixel_wise_softmax(output_map,i=''):
     exponential_map = tf.exp(output_map)
