@@ -51,12 +51,7 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3,
     :param summaries: Flag if summaries should be created
     """
     
-    logging.info( '''Layers {layers}, features {features},\
-    filter size {filter_size}x{filter_size},\
-    pool size: {pool_size}x{pool_size}'''.format(layers=layers,
-                                      features=features_root,
-                                      filter_size=filter_size,
-                                      pool_size=pool_size))
+    logging.info( '''Layers {layers}, features {features},filter size {filter_size}x{filter_size},pool size: {pool_size}x{pool_size}'''.format(layers=layers,features=features_root, filter_size=filter_size, pool_size=pool_size))
 
     # Placeholder for the input image
     nx = tf.shape(x)[1]
@@ -496,8 +491,8 @@ class Trainer(object):
         return pred_shape
     
     def output_epoch_stats(self, epoch, total_loss, training_iters, lr):
-        logging.info('''Epoch {:}, Average loss: {:.4f}, 
-        learning rate: {:.4f}'''.format(epoch, (total_loss / training_iters), lr))
+        logging.info('''Epoch {:}, Average loss: {:.4f},learning rate: {:.4f}'''.format(epoch,
+                                                                   (total_loss / training_iters), lr))
     
     def output_minibatch_stats(self, sess, summary_writer, step, batch_x, batch_y):
         # Calculate batch loss and accuracy
@@ -510,9 +505,7 @@ class Trainer(object):
                                                                       self.net.keep_prob: 1.})
         summary_writer.add_summary(summary_str, step)
         summary_writer.flush()
-        logging.info('''Iter {:}, Minibatch Loss= {:.4f}, 
-        Training Accuracy= {:.4f}, Minibatch 
-        error= {:.1f}%'''.format(step,loss,acc, error_rate(predictions, batch_y)))
+        logging.info('''Iter {:}, Minibatch Loss= {:.4f},Training Accuracy= {:.4f}, Minibatch error= {:.1f}%'''.format(step,loss,acc, error_rate(predictions, batch_y)))
 
 def _update_avg_gradients(avg_gradients, gradients, step):
     if avg_gradients is None:
