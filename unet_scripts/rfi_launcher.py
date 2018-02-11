@@ -36,16 +36,16 @@ def create_training_path(output_path):
     return path
 
 @click.command()
-@click.option('--data_root', default="./data/hide_sim_30days_seeked/*")
-@click.option('--output_path', default="./unet_models/hideseek_00")
+@click.option('--data_root', default="./bleien_data")
+@click.option('--output_path', default="./daint_unet_trained_rfi_bleien")
 @click.option('--training_iters', default=32)
 @click.option('--epochs', default=100)
 @click.option('--restore', default=False)
-@click.option('--layers', default=3)
+@click.option('--layers', default=5)
 @click.option('--features_root', default=64)
 def launch(data_root, output_path, training_iters, epochs, restore, layers, features_root):
     print("Using data from: %s"%data_root)
-    data_provider = DataProvider(600, glob.glob(data_root))
+    data_provider = DataProvider(600, glob.glob(data_root+"/*"))
     
     net = unet.Unet(channels=data_provider.channels, 
                     n_class=data_provider.n_class, 
